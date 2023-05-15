@@ -1,0 +1,64 @@
+#include <iostream>
+#include <cstdlib>
+#include <omp.h>
+using namespace std;
+
+void quicksort(int* arr, int left, int right) {
+    if (left < right) {
+        int pivot = arr[(left + right) / 2];
+        int i = left - 1, j = right + 1;
+        while (true) {
+            do {
+                i++;
+            } while (arr[i] < pivot);
+            do {
+                j--;
+            } while (arr[j] > pivot);
+            if (i >= j) {
+                break;
+            }
+            swap(arr[i], arr[j]);
+        }
+        #pragma omp parallel sections
+        {
+            #pragma omp section
+            {
+                quicksort(arr, left, j);
+            }
+            #pragma omp section
+            {
+                quicksort(arr, j + 1, right);
+            }
+        }
+    }
+}
+
+int main() {
+    const int N = 1000000;
+    int* arr = new int[N];
+
+    // Заполнение массива случайными числами
+    srand(42);
+    for (int i = 0; i < N; i++) {
+        arr[i] = rand();
+    }
+
+    double start_time = omp_get_wtime(); // начальное время
+
+    quicksort(arr, 0, N - 1);
+
+    double end_time = omp_get_wtime(); // конечное время
+    double elapsed_time = end_time - start_time; // затраченное время
+    cout << "Time: " << elapsed_time << " seconds" << endl;
+
+    // Проверка, что массив отсортирован
+    for (int i = 0; i < N - 1; i++) {
+        if (arr[i] > arr[i + 1]) {
+            cout << "Error: array not sorted" << endl;
+            break;
+        }
+    }
+
+    delete[] arr;
+    return 0;
+}

@@ -1,0 +1,71 @@
+#include <mpi.h>
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <algorithm>
+
+using namespace std;
+
+int main(int argc, char** argv) {
+    int rank, size;
+
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    // Проверка на правильное количество аргументов командной строки
+    if (argc < 3) {
+        if (rank == 0) {
+            cout << "Usage: " << argv[0] << " input_file_names output_file_name" << endl;
+        }
+        MPI_Finalize();
+        return 1;
+    }
+
+    // Открытие входных файлов
+    vector<ifstream> input_files;
+    for (int i = 1; i < argc - 1; i++) {
+        input_files.emplace_back(argv[i]);
+    }
+
+    // Вычисление минимального элемента в каждом файле
+    vector<double> min_values(input_files.size());
+    for (int i = 0; i < input_files.size(); i++) {
+        double min_value = numeric_limits<double>::max();
+        while (!input_files[i].eof()) {
+            double x;
+            input_files[i] >> x;
+            min_value = min(min_value, x);
+        }
+        min_values[i] = min_value;
+    }
+
+    // Открытие выходного файла для записи
+    ofstream output_file(argv[argc - 1]);
+
+    // Сбор минимальных значений на процессе 0
+    if (rank == 0) {
+        vector<double> all_min_values(input_files.size());
+        MPI_Gather(min_values.data(), 1, MPI_DOUBLE, all_min_values.data(), 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+        // Вычисление общего минимального значения
+        double min_value = numeric_limits<double>::max();
+        for (double x : all_min_values) {
+            min_value = min(min_value, x);
+        }
+
+        // Запись результата в выходной файл
+        output_file << min_value << endl;
+    } else {
+        MPI_Gather(min_values.data(), 1, MPI_DOUBLE, nullptr, 0, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    }
+
+    // Закрытие файлов и завершение программы
+    output_file.close();
+    for (auto& input_file : input_files) {
+        input_file.close();
+    }
+
+    MPI_Finalize();
+    return 0;
+}
