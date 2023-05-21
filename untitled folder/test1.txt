@@ -69,3 +69,77 @@ int main(int argc, char** argv) {
     MPI_Finalize();
     return 0;
 }
+
+
+
+#include <mpi.h>        // Подключение библиотеки MPI (Message Passing Interface) для распределенных вычислений
+#include <iostream>     // Подключение библиотеки iostream для работы с вводом/выводом
+#include <fstream>      // Подключение библиотеки fstream для работы с файлами
+#include <vector>       // Подключение библиотеки vector для работы с векторами
+#include <limits>       // Подключение библиотеки limits для использования числовых пределов
+#include <algorithm>    // Подключение библиотеки algorithm для использования алгоритмов STL
+
+using namespace std;
+
+// Функция для нахождения минимального значения в файле
+double findMinValue(const string& filename) {
+    ifstream input_file(filename);                  // Открытие входного файла для чтения
+    double min_value = numeric_limits<double>::max();     // Инициализация минимального значения максимально возможным значением типа double
+    double x;
+    while (input_file >> x) {
+        min_value = min(min_value, x);              // Обновление минимального значения, если найдено более маленькое число
+    }
+    input_file.close();                             // Закрытие входного файла
+    return min_value;                               // Возвращение найденного минимального значения
+}
+
+int main(int argc, char** argv) {
+    int rank, size;
+
+    MPI_Init(&argc, &argv);                          // Инициализация MPI и передача аргументов командной строки
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);            // Получение ранга текущего процесса
+    MPI_Comm_size(MPI_COMM_WORLD, &size);            // Получение общего количества процессов
+
+    if (argc < 3) {
+        if (rank == 0) {
+            cout << "Usage: " << argv[0] << " input_file_names output_file_name" << endl;
+        }
+        MPI_Finalize();                             // Завершение работы MPI
+        return 1;                                   // Выход из программы с кодом ошибки
+    }
+
+    if (size < 2) {
+        if (rank == 0) {
+            cout << "Error: This program requires at least 2 processes." << endl;
+        }
+        MPI_Finalize();                             // Завершение работы MPI
+        return 1;                                   // Выход из программы с кодом ошибки
+    }
+
+    const int num_files = argc - 2;
+    const string output_filename = argv[argc - 1];   // Получение имени выходного файла
+
+    if (rank == 0) {
+        // Процесс 0 читает свой собственный файл и инициализирует минимальное значение
+        double min_value = findMinValue(argv[1]);
+
+        // Процесс 0 сравнивает свое минимальное значение с минимальными значениями от других процессов
+        for (int i = 1; i < size; i++) {
+            double recv_value;
+            MPI_Recv(&recv_value, 1, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);    // Процесс 0 получает минимальное значение от процесса i
+            min_value = min(min_value, recv_value);                                            // Обновление минимального значения, если найдено более маленькое число
+        }
+
+        // Процесс 0 записывает результат в выходной файл
+        ofstream output_file(output_filename);       // Открытие выходного файла для записи
+        output_file << min_value << endl;            // Запись минимального значения в файл
+        output_file.close();                         // Закрытие выходного файла
+    } else {
+        // Остальные процессы читают свои собственные файлы и отправляют минимальное значение процессу 0
+        double min_value = findMinValue(argv[rank]);  // Нахождение минимального значения в своем файле
+        MPI_Send(&min_value, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);    // Отправка минимального значения процессу 0
+    }
+
+    MPI_Finalize();                                 // Завершение работы MPI
+    return 0;                                       // Выход из программы с кодом успешного выполнения
+}
